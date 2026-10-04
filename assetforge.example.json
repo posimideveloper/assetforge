@@ -1,0 +1,17 @@
+{
+  "network": "testnet",
+  "code": "ACME",
+  "issuer": "GBRPYHIL2CI3FNQ4BXLFMNDLFJUNPU2HY3ZMFSHONUCEOASW7QC7OX2H",
+  "distributor": "GA5ZSEJYB37JRC5AVCIA5MOP4RHTM335X2KGX3IHOJAPP5RE34K4KZVN",
+  "supply": "1000000",
+  "homeDomain": "acme.example",
+  "lockIssuer": true,
+  "toml": {
+    "name": "Acme Credits",
+    "desc": "Loyalty credits redeemable at Acme stores.",
+    "image": "https://acme.example/acme.png",
+    "orgName": "Acme Ltd",
+    "orgUrl": "https://acme.example",
+    "anchorAssetType": "other"
+  }
+}
