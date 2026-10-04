@@ -104,6 +104,25 @@ npm test        # 21 tests: validation, plan order/sequences/ops, toml, audit, C
 npm run lint && npm run typecheck && npm run build
 ```
 
+## Web app
+
+![assetforge web app](docs/assets/web-app.png)
+
+An issuance studio at `web/`, using this package's validation, planning, toml and audit code in the browser:
+
+- **Issue**: describe the asset (network, code, issuer, distributor, supply, home domain, issuer powers, lock) with live validation of every irreversible choice. Build the plan with sequence numbers from Horizon, then **sign & submit each step with Freighter** in order, or copy the XDR to sign elsewhere.
+- **stellar.toml**: fill in what wallets display (name, description, logo, organisation, asset type), then preview and download the file.
+- **Audit an issuer**: lock status, single-key control, freeze and clawback powers, home domain and stellar.toml checks for any issuer on testnet or mainnet.
+
+```bash
+cd web
+npm install
+npm run dev        # http://localhost:5173
+```
+
+The app imports the library straight from `../src`, so the browser and the CLI
+share one implementation. `netlify.toml` at the repo root deploys it as-is.
+
 ## Documentation
 
 - [Architecture](docs/architecture.md)
