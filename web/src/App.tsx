@@ -48,7 +48,7 @@ export default function App() {
       <header className="border-b border-rivet">
         <div className="mx-auto flex max-w-6xl items-center justify-between px-5 py-4">
           <div className="flex items-center gap-3">
-            <img src="/favicon.svg" className="h-9 w-9" alt="" />
+            <img src={`${import.meta.env.BASE_URL}favicon.svg`} className="h-9 w-9" alt="" />
             <span className="text-xl font-black uppercase tracking-tight">
               asset<span className="text-molten">forge</span>
             </span>
