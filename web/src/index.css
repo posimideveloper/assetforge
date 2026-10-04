@@ -1,0 +1,27 @@
+@import "tailwindcss";
+
+@theme {
+  --color-steel: #15171b;
+  --color-iron: #1d2026;
+  --color-rivet: #2c313a;
+  --color-ash: #9aa1ad;
+  --color-spark: #f2f3f5;
+  --color-molten: #ff7a1a;
+  --color-ember: #ffb347;
+  --color-quench: #3ecf8e;
+  --color-slag: #ff5a5a;
+  --font-sans: "Archivo", system-ui, sans-serif;
+  --font-mono: "Martian Mono", ui-monospace, monospace;
+}
+body { background: var(--color-steel); color: var(--color-spark); font-family: var(--font-sans); }
+
+@layer components {
+  .plate { background: var(--color-iron); border: 1px solid var(--color-rivet); border-radius: 4px; }
+  .ingot { width: 100%; background: var(--color-steel); border: 1px solid var(--color-rivet); border-radius: 3px; padding: .55rem .7rem; font-size: .88rem; color: var(--color-spark); }
+  .ingot:focus { outline: none; border-color: var(--color-molten); }
+  .hammer { border-radius: 3px; padding: .55rem 1rem; font-weight: 800; font-size: .8rem; letter-spacing: .06em; text-transform: uppercase; }
+  .hammer:disabled { opacity: .4; }
+  .hammer-hot { background: var(--color-molten); color: #1a0c00; }
+  .hammer-cold { border: 1px solid var(--color-rivet); color: var(--color-spark); }
+  .stamp { font-family: var(--font-mono); font-size: .65rem; letter-spacing: .1em; text-transform: uppercase; color: var(--color-ash); }
+}
