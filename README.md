@@ -104,6 +104,12 @@ npm test        # 21 tests: validation, plan order/sequences/ops, toml, audit, C
 npm run lint && npm run typecheck && npm run build
 ```
 
+## Documentation
+
+- [Architecture](docs/architecture.md)
+- [Issuance checklist](docs/issuance-checklist.md)
+- [Contributing](CONTRIBUTING.md) · [Security policy](SECURITY.md) · [Changelog](CHANGELOG.md)
+
 ## Glossary (new to Stellar?)
 
 - **Issuer**: the account that creates an asset. Payments *from* it mint
