@@ -20,6 +20,18 @@ export interface TomlInfo {
   anchorAssetType?: string;
 }
 
+/** An extra key that can sign for the issuer (multisig issuer). */
+export interface IssuerSigner {
+  key: string;
+  weight: number;
+}
+
+/** One claimable balance to create from the distributor. */
+export interface DistributionEntry {
+  destination: string;
+  amount: string;
+}
+
 export interface IssuanceConfig {
   network: "public" | "testnet";
   code: string;
@@ -31,6 +43,12 @@ export interface IssuanceConfig {
   flags?: AssetFlags;
   /** Permanently disable the issuer after issuing, fixing the supply forever. */
   lockIssuer?: boolean;
+  /** Co-signers added to an issuer that stays unlocked (multisig issuer). */
+  issuerSigners?: IssuerSigner[];
+  /** Thresholds for a multisig issuer; the master key keeps weight 1. */
+  issuerThresholds?: { low: number; med: number; high: number };
+  /** Hand the supply out as claimable balances from the distributor. */
+  distribution?: DistributionEntry[];
   toml?: TomlInfo;
 }
 
@@ -68,5 +86,38 @@ export function validateConfig(c: IssuanceConfig): IssuanceConfig {
     throw new Error("a locked issuer can never authorize, freeze or claw back, so lockIssuer can't be combined with auth flags");
   }
   if (c.toml && !c.homeDomain) throw new Error("toml info needs a homeDomain to be published on");
+
+  if (c.issuerSigners?.length || c.issuerThresholds) {
+    if (c.lockIssuer) throw new Error("a multisig issuer stays unlocked: issuerSigners can't be combined with lockIssuer");
+    const signers = c.issuerSigners ?? [];
+    const seen = new Set<string>();
+    for (const s of signers) {
+      if (!StrKey.isValidEd25519PublicKey(s.key)) throw new Error(`issuerSigners: ${s.key} is not a G… address`);
+      if (s.key === c.issuer) throw new Error("issuerSigners: the issuer's own key is the master key, don't list it");
+      if (seen.has(s.key)) throw new Error(`issuerSigners: ${s.key} is listed twice`);
+      seen.add(s.key);
+      if (!Number.isInteger(s.weight) || s.weight < 1 || s.weight > 255) throw new Error("issuerSigners: weights must be 1-255");
+    }
+    const t = c.issuerThresholds;
+    if (t) {
+      const total = 1 + signers.reduce((n, s) => n + s.weight, 0); // master key keeps weight 1
+      for (const [name, v] of Object.entries(t)) {
+        if (!Number.isInteger(v) || v < 0 || v > 255) throw new Error(`issuerThresholds.${name} must be 0-255`);
+        if (v > total) throw new Error(`issuerThresholds.${name} (${v}) is more than all keys together can reach (${total}): the issuer would be locked out`);
+      }
+      if (!(t.low <= t.med && t.med <= t.high)) throw new Error("issuerThresholds must satisfy low ≤ med ≤ high");
+    }
+  }
+
+  if (c.distribution?.length) {
+    if (c.distribution.length > 1_000) throw new Error("distribution can have at most 1000 entries");
+    let total = 0n;
+    for (const d of c.distribution) {
+      if (!StrKey.isValidEd25519PublicKey(d.destination)) throw new Error(`distribution: ${d.destination} is not a G… address`);
+      if (!AMOUNT.test(d.amount) || Number(d.amount) <= 0) throw new Error(`distribution: ${d.amount} is not a positive amount with ≤ 7 decimals`);
+      total += toStroops(d.amount);
+    }
+    if (total > toStroops(c.supply)) throw new Error("distribution adds up to more than the supply");
+  }
   return c;
 }
