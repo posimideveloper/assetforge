@@ -1,4 +1,5 @@
-import { Link, useTitle } from "../lib/router";
+import { useEffect } from "react";
+import { Link, useSection, useTitle } from "../lib/router";
 
 const SECTIONS = [
   ["start", "Getting started"],
@@ -9,23 +10,19 @@ const SECTIONS = [
 
 export function Docs() {
   useTitle("Docs · assetforge");
+  const section = useSection();
+  useEffect(() => {
+    if (section) document.getElementById(section)?.scrollIntoView({ behavior: "smooth" });
+  }, [section]);
   return (
     <div className="mx-auto grid max-w-6xl gap-12 px-5 py-14 lg:grid-cols-[210px_1fr]">
       <aside className="hidden lg:block">
         <nav className="sticky top-24 space-y-1 text-sm">
           <p className="mb-3 px-3 stamp text-ember">On this page</p>
           {SECTIONS.map(([id, label]) => (
-            <a
-              key={id}
-              href="#/docs"
-              onClick={(e) => {
-                e.preventDefault();
-                document.getElementById(id)?.scrollIntoView({ behavior: "smooth" });
-              }}
-              className="block rounded-lg px-3 py-2 text-ash hover:text-spark"
-            >
+            <Link key={id} to={`/docs/${id}`} className="block rounded-lg px-3 py-2 text-ash hover:text-spark">
               {label}
-            </a>
+            </Link>
           ))}
         </nav>
       </aside>
@@ -65,7 +62,11 @@ export function Docs() {
         <section id="reference" className="scroll-mt-24 space-y-5">
           <h2 className="text-3xl font-black uppercase tracking-tight text-spark">CLI & library</h2>
           <p className="text-ash">The same checks are available from the command line:</p>
-          <pre className="overflow-x-auto p-5 font-mono text-xs leading-relaxed plate text-ember">{`assetforge plan acme.json                            # validate + print the ordered steps
+          <pre className="overflow-x-auto p-5 font-mono text-xs leading-relaxed plate text-ember">{`# the npm name "assetforge" is someone else's package; install this one from GitHub
+npm install -g github:posimideveloper/assetforge
+
+assetforge plan acme.json                            # validate + print the ordered steps
+assetforge plan acme.json --out acme-plan.json       # bundle for offline signing
 assetforge toml acme.json > .well-known/stellar.toml
 assetforge audit G…ISSUER --code ACME`}</pre>
           <div className="plate overflow-x-auto">
