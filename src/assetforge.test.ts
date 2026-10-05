@@ -102,7 +102,7 @@ const tomlFetch = (body: string, status = 200) => async () => ({ ok: status === 
 
 describe("auditIssuer", () => {
   it("passes a locked issuer with a matching stellar.toml", async () => {
-    const checks = await auditIssuer(account(), "ACME", tomlFetch(`ACCOUNTS=["${ISSUER}"]\n[[CURRENCIES]]\ncode="ACME"`));
+    const checks = await auditIssuer(account(), "ACME", tomlFetch(`ACCOUNTS=["${ISSUER}"]\n[[CURRENCIES]]\ncode="ACME"\nissuer="${ISSUER}"`));
     expect(checks.every((c) => c.level === "ok")).toBe(true);
   });
 
