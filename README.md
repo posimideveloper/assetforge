@@ -14,6 +14,19 @@ right order. Several mistakes are permanent:
 transactions, generates the `stellar.toml` wallets need to display your
 asset, and audits any existing issuer for common problems.
 
+## Install
+
+> **Heads-up:** the npm name `assetforge` belongs to an unrelated project (an
+> asset-optimisation toolkit by another author). Don't `npm install assetforge`
+> or `npx assetforge`. This package is `@posimideveloper/assetforge` and isn't
+> on npm yet, so install it from GitHub (it builds on install):
+
+```bash
+npm install -g github:posimideveloper/assetforge   # puts `assetforge` on your PATH
+# or, in a project:
+npm install github:posimideveloper/assetforge
+```
+
 ## 1. Describe the asset
 
 ```json
@@ -35,11 +48,30 @@ and keys, issuer = distributor, supply above Stellar's maximum or with
 more than 7 decimals, clawback without revocable, and a locked issuer
 combined with auth flags (which could never be used).
 
+Optional extras:
+
+- **Multisig issuer** (for issuers that stay unlocked, e.g. stablecoins):
+  `"issuerSigners": [{ "key": "G…", "weight": 1 }]` and
+  `"issuerThresholds": { "low": 1, "med": 2, "high": 2 }`. The master key keeps
+  weight 1; thresholds no key set could reach are rejected, and this can't be
+  combined with `lockIssuer`.
+- **Distribution**: `"distribution": [{ "destination": "G…", "amount": "250" }]`
+  creates claimable balances from the distributor, 100 per transaction.
+  Recipients claim once they trust the asset; the distributor is a second
+  claimant so unclaimed balances can be taken back. The total can't exceed
+  the supply.
+
 ## 2. Plan the issuance
+
+`plan` reads both accounts from Horizon and **skips steps that are already
+done on-chain** (flags and home domain set, trustline open, supply issued,
+issuer locked, co-signers added), so you can safely re-run it after a
+half-finished issuance without, say, issuing the supply twice.
+`--out plan.json` writes the steps (title, signer, notes, XDR) as one bundle
+for offline or hardware-wallet signing.
 
 ```console
 $ assetforge plan acme.json
-
 Step 1: Configure the issuer (home domain and flags)  (sign with: issuer)
   • Wallets will look for https://acme.example/.well-known/stellar.toml
   AAAAAgAAAAB…
@@ -81,18 +113,24 @@ $ assetforge audit G…ISSUER --code ACME
 ✔ Holders can't be frozen or clawed back
 ✔ Home domain is acme.example
 ✔ stellar.toml lists this issuer
+
+ACME: 1204 holder(s), 1000000.0000000 in circulation
+  1. GD…  250000.0000000
+  …
 ```
 
 Use it on your own issuer after launch, or on someone else's before you
 trust their token. It checks lock status, single-key control, freeze
 and clawback powers, the home domain, and whether `stellar.toml` is
-reachable and lists the issuer and asset. Exit code `2` means at least
-one check failed.
+reachable (with `Access-Control-Allow-Origin: *` so browser wallets can read
+it) and has a `[[CURRENCIES]]` entry whose `code` **and** `issuer` match.
+With `--code` it also prints the holder count, circulating supply and the
+largest holders. Exit code `2` means at least one check failed.
 
 ## Library
 
 ```ts
-import { validateConfig, buildPlan, generateToml, auditIssuer } from "assetforge";
+import { validateConfig, buildPlan, generateToml, auditIssuer } from "@posimideveloper/assetforge";
 const steps = buildPlan(validateConfig(config), { issuer: "123", distributor: "456" });
 ```
 
@@ -107,6 +145,10 @@ npm run lint && npm run typecheck && npm run build
 ## Web app
 
 ![assetforge web app](docs/assets/web-app.png)
+
+The site has three pages: **Home** (what it does, with live testnet data), **App** (the tool itself) and **Docs** (getting started, concepts, reference and FAQ).
+
+![assetforge app page](docs/assets/web-app-page.png)
 
 An issuance studio at `web/`, using this package's validation, planning, toml and audit code in the browser:
 

@@ -1,5 +1,5 @@
 {
-  "name": "assetforge",
+  "name": "@posimideveloper/assetforge",
   "version": "0.1.0",
   "description": "Issue Stellar assets the safe way: ordered issuance transactions, issuer locking, stellar.toml generation and issuer audits.",
   "license": "MIT",
@@ -19,7 +19,8 @@
     "build": "tsc -p tsconfig.build.json",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
-    "lint": "eslint src"
+    "lint": "eslint src",
+    "prepare": "npm run build"
   },
   "keywords": [
     "stellar",
