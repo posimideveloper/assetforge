@@ -2,9 +2,9 @@ import { useMemo, useState } from "react";
 import { signTransaction } from "@stellar/freighter-api";
 import { StrKey } from "@stellar/stellar-sdk";
 import { validateConfig, PASSPHRASE, type IssuanceConfig, type TomlInfo } from "../../src/config";
-import { buildPlan, type PlanStep } from "../../src/plan";
+import { buildPlan, completedSteps, planBundle, type HorizonBalances, type PlanStep, type StepId } from "../../src/plan";
 import { generateToml } from "../../src/toml";
-import { auditIssuer, type AuditCheck, type HorizonAccount } from "../../src/audit";
+import { assetStats, auditIssuer, type AssetStats, type AuditCheck, type HorizonAccount } from "../../src/audit";
 import { connectWallet } from "./lib/stellar";
 
 const HORIZON = { public: "https://horizon.stellar.org", testnet: "https://horizon-testnet.stellar.org" };
@@ -15,7 +15,7 @@ async function horizonAccount(net: "public" | "testnet", id: string) {
   const res = await fetch(`${HORIZON[net]}/accounts/${id}`);
   if (res.status === 404) throw new Error(`${id.slice(0, 6)}… doesn't exist on ${net}. Fund it first.`);
   if (!res.ok) throw new Error(`Horizon returned ${res.status}`);
-  return (await res.json()) as HorizonAccount & { sequence: string };
+  return (await res.json()) as HorizonAccount & HorizonBalances & { sequence: string };
 }
 
 export function Workspace() {
@@ -72,11 +72,11 @@ export function Workspace() {
           issuance in the only safe order and checks every irreversible choice before you sign.
         </p>
       </section>
-      <main className="mx-auto max-w-6xl px-5 pb-16">
+      <div className="mx-auto max-w-6xl px-5 pb-16">
         {tab === "issue" && <Issue cfg={cfg} cleaned={cleaned} set={set} problem={problem} />}
         {tab === "toml" && <Toml cfg={cfg} cleaned={cleaned} set={set} problem={problem} />}
         {tab === "audit" && <Audit defaultNet={cfg.network} />}
-      </main>
+      </div>
     </div>
   );
 }
@@ -99,6 +99,7 @@ function F({ label, children }: { label: string; children: React.ReactNode }) {
 
 function Issue({ cfg, cleaned, set, problem }: FormProps) {
   const [steps, setSteps] = useState<PlanStep[] | null>(null);
+  const [skipped, setSkipped] = useState<StepId[]>([]);
   const [state, setState] = useState<Record<number, { busy?: boolean; hash?: string; error?: string }>>({});
   const [planErr, setPlanErr] = useState<string | null>(null);
   const flags = cfg.flags ?? {};
@@ -109,7 +110,10 @@ function Issue({ cfg, cleaned, set, problem }: FormProps) {
     try {
       const c = validateConfig(cleaned);
       const [iss, dist] = await Promise.all([horizonAccount(c.network, c.issuer), horizonAccount(c.network, c.distributor)]);
-      setSteps(buildPlan(c, { issuer: iss.sequence, distributor: dist.sequence }));
+      // Resume safely: anything already on-chain (flags, trustline, supply, lock) is left out.
+      const done = completedSteps(c, iss, dist);
+      setSkipped([...done]);
+      setSteps(buildPlan(c, { issuer: iss.sequence, distributor: dist.sequence }, 3600, done));
     } catch (e) {
       setSteps(null);
       setPlanErr(e instanceof Error ? e.message : String(e));
@@ -198,6 +202,30 @@ function Issue({ cfg, cleaned, set, problem }: FormProps) {
           <div className="plate flex h-full min-h-64 items-center justify-center p-10 text-center text-ash">
             Fill in the spec and build the plan. Sequence numbers come live from Horizon, and you sign each step with
             Freighter, switching between the issuer and distributor accounts.
+          </div>
+        )}
+        {steps && (
+          <div className="plate flex flex-wrap items-center justify-between gap-3 p-4 text-sm">
+            <span className="text-ash">
+              {skipped.length
+                ? `Already done on-chain, skipped: ${skipped.join(", ")}.`
+                : "Nothing done on-chain yet: all steps below are needed."}
+              {steps.length === 0 && " The issuance is complete."}
+            </span>
+            {steps.length > 0 && (
+              <button
+                className="hammer hammer-cold"
+                onClick={() => {
+                  const blob = new Blob([JSON.stringify(planBundle(validateConfig(cleaned), steps), null, 2)], { type: "application/json" });
+                  const a = document.createElement("a");
+                  a.href = URL.createObjectURL(blob);
+                  a.download = `${cfg.code || "asset"}-plan.json`;
+                  a.click();
+                }}
+              >
+                Download plan (JSON)
+              </button>
+            )}
           </div>
         )}
         {steps?.map((s, i) => {
@@ -319,6 +347,7 @@ function Audit({ defaultNet }: { defaultNet: "public" | "testnet" }) {
   const [issuer, setIssuer] = useState("");
   const [code, setCode] = useState("");
   const [checks, setChecks] = useState<AuditCheck[] | null>(null);
+  const [stats, setStats] = useState<AssetStats | null>(null);
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
   const icon = { ok: ["✔", "text-quench"], warn: ["▲", "text-ember"], fail: ["✘", "text-slag"] } as const;
@@ -332,10 +361,12 @@ function Audit({ defaultNet }: { defaultNet: "public" | "testnet" }) {
           e.preventDefault();
           setErr(null);
           setChecks(null);
+          setStats(null);
           if (!StrKey.isValidEd25519PublicKey(issuer)) return setErr("Enter an issuer G… address.");
           setBusy(true);
           try {
             setChecks(await auditIssuer(await horizonAccount(net, issuer), code || undefined));
+            if (code) assetStats(HORIZON[net], code, issuer).then(setStats).catch(() => setStats(null));
           } catch (e2) {
             setErr(e2 instanceof Error ? e2.message : String(e2));
           } finally {
@@ -363,6 +394,27 @@ function Audit({ defaultNet }: { defaultNet: "public" | "testnet" }) {
             </li>
           ))}
         </ul>
+      )}
+      {stats && (
+        <div className="mt-5 rounded border border-rivet bg-steel p-4 text-sm">
+          <p className="stamp">Distribution</p>
+          <p className="mt-2">
+            <b>{stats.holders}</b> holder{stats.holders === 1 ? "" : "s"} · <b>{stats.supply}</b> {code} in circulation
+          </p>
+          {stats.top.length > 0 && (
+            <ol className="mt-3 space-y-1 font-mono text-xs text-ash">
+              {stats.top.map((h) => (
+                <li key={h.account} className="flex justify-between gap-3">
+                  <span>
+                    {h.account.slice(0, 6)}…{h.account.slice(-6)}
+                  </span>
+                  <span className="text-spark">{h.balance}</span>
+                </li>
+              ))}
+            </ol>
+          )}
+          {stats.partial && <p className="mt-2 text-xs text-ash">Top holders from the first {stats.top.length ? "1,000" : ""} accounts scanned.</p>}
+        </div>
       )}
     </section>
   );

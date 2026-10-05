@@ -14,7 +14,22 @@ export interface HorizonAccount {
   signers: { key: string; weight: number }[];
 }
 
-export type FetchText = (url: string) => Promise<{ ok: boolean; status: number; text: () => Promise<string> }>;
+export type FetchText = (
+  url: string,
+) => Promise<{ ok: boolean; status: number; text: () => Promise<string>; headers?: { get: (name: string) => string | null } }>;
+
+/** The [[CURRENCIES]] tables of a stellar.toml, as key → value maps (strings only). */
+export function tomlCurrencies(toml: string): Record<string, string>[] {
+  return toml
+    .split(/^\s*\[\[CURRENCIES\]\]\s*$/m)
+    .slice(1)
+    .map((block) => {
+      const body = block.split(/^\s*\[/m)[0]; // stop at the next table
+      const out: Record<string, string> = {};
+      for (const m of body.matchAll(/^\s*([A-Za-z_]+)\s*=\s*"([^"]*)"/gm)) out[m[1]] = m[2];
+      return out;
+    });
+}
 
 /** Inspect an issuer account (and its stellar.toml) for common issuance mistakes. */
 export async function auditIssuer(
@@ -56,10 +71,17 @@ export async function auditIssuer(
       return checks;
     }
     const toml = await res.text();
+    const cors = res.headers?.get("access-control-allow-origin");
+    if (res.headers && cors !== "*") {
+      add("warn", "stellar.toml isn't served with Access-Control-Allow-Origin: *, so browser wallets can't read it");
+    }
+    const currencies = tomlCurrencies(toml);
     if (!toml.includes(account.account_id)) {
       add("fail", "stellar.toml doesn't mention this issuer account");
-    } else if (assetCode && !new RegExp(`code\\s*=\\s*"${assetCode}"`).test(toml)) {
+    } else if (assetCode && !currencies.some((c) => c.code === assetCode)) {
       add("fail", `stellar.toml has no [[CURRENCIES]] entry for ${assetCode}`);
+    } else if (assetCode && !currencies.some((c) => c.code === assetCode && c.issuer === account.account_id)) {
+      add("fail", `stellar.toml's ${assetCode} entry names a different issuer`);
     } else {
       add("ok", "stellar.toml lists this issuer");
     }
@@ -67,4 +89,48 @@ export async function auditIssuer(
     add("fail", `Couldn't fetch ${url}`);
   }
   return checks;
+}
+
+export interface AssetStats {
+  holders: number;
+  supply: string;
+  /** Largest balances seen (from up to `maxAccounts` holders). */
+  top: { account: string; balance: string }[];
+  /** True when there were more holders than were scanned for `top`. */
+  partial: boolean;
+}
+
+type FetchJson = (url: string) => Promise<{ ok: boolean; status: number; json: () => Promise<unknown> }>;
+
+/** Holder count, circulating supply and the largest holders of an asset. */
+export async function assetStats(
+  horizonUrl: string,
+  code: string,
+  issuer: string,
+  fetchJson: FetchJson = fetch as unknown as FetchJson,
+  maxAccounts = 1_000,
+): Promise<AssetStats> {
+  const res = await fetchJson(`${horizonUrl}/assets?asset_code=${code}&asset_issuer=${issuer}`);
+  if (!res.ok) throw new Error(`Horizon returned HTTP ${res.status} for the asset`);
+  const record = ((await res.json()) as { _embedded: { records: { accounts?: { authorized: number }; balances?: { authorized: string } }[] } })
+    ._embedded.records[0];
+  const holders = record?.accounts?.authorized ?? 0;
+  const supply = record?.balances?.authorized ?? "0";
+
+  const balances: { account: string; balance: string }[] = [];
+  let url: string | null = `${horizonUrl}/accounts?asset=${code}:${issuer}&limit=200`;
+  while (url && balances.length < maxAccounts) {
+    const page = (await (await fetchJson(url)).json()) as {
+      _embedded: { records: { account_id: string; balances: { asset_code?: string; asset_issuer?: string; balance: string }[] }[] };
+      _links: { next?: { href: string } };
+    };
+    const records = page._embedded.records;
+    for (const a of records) {
+      const b = a.balances.find((x) => x.asset_code === code && x.asset_issuer === issuer);
+      if (b) balances.push({ account: a.account_id, balance: b.balance });
+    }
+    url = records.length === 200 ? (page._links.next?.href ?? null) : null;
+  }
+  balances.sort((x, y) => Number(y.balance) - Number(x.balance));
+  return { holders, supply, top: balances.slice(0, 10), partial: holders > balances.length };
 }
